@@ -1,13 +1,13 @@
 ================================================================================
 SENIOR .NET DEVELOPER INTERVIEW PREPARATION GUIDE
-TruterraSmart Program Management Service
+Project Program Management Service
 ================================================================================
 
 PROJECT OVERVIEW
 ================================================================================
 
 What This Project Does:
-- TruterraSmart Program Management Service is a backend microservice that manages:
+- Project Program Management Service is a backend microservice that manages:
   * Farmer Programs (Field programs with phases, workers, activities)
   * Assets & Asset Activities (Farm equipment, tools, resources)
   * Documents & Document Packets (DocuSign integration)
@@ -801,7 +801,7 @@ HR + TECHNICAL COMBINED QUESTIONS
 Q1: Explain Your Project in 2 Minutes
 
 Good Answer:
-"I developed a Program Management Service for TruterraSmart, a digital 
+"I developed a Program Management Service for Project, a digital 
 agriculture platform. The service manages farmer participation in seasonal 
 programs, activities, and document collection.
 
@@ -1010,6 +1010,6 @@ LET'S START WITH ROUND 1: ARCHITECTURE QUESTIONS
 END OF DOCUMENT
 ================================================================================
 Created: May 21, 2026
-For: Interview Preparation - TruterraSmart Program Management Service
+For: Interview Preparation - Project Program Management Service
 Format: Plain Text Interview Guide
 ================================================================================
