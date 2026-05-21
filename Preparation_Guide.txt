@@ -1,0 +1,1015 @@
+================================================================================
+SENIOR .NET DEVELOPER INTERVIEW PREPARATION GUIDE
+TruterraSmart Program Management Service
+================================================================================
+
+PROJECT OVERVIEW
+================================================================================
+
+What This Project Does:
+- TruterraSmart Program Management Service is a backend microservice that manages:
+  * Farmer Programs (Field programs with phases, workers, activities)
+  * Assets & Asset Activities (Farm equipment, tools, resources)
+  * Documents & Document Packets (DocuSign integration)
+  * Farmer Program Activities (FPA) - tracking field practice activities
+  * Quantification & Estimates - measuring and estimating outcomes
+  * Notifications & Audit Tracking - event-driven notifications and audit logs
+
+Business Use Case:
+- A digital agriculture platform where:
+  1. Farmers enroll in seasonal programs (e.g., improved crop practices)
+  2. Program Managers assign activities (e.g., soil testing, fertilizer application)
+  3. Workers complete activities in fields
+  4. Documents are collected and sent via DocuSign
+  5. Results are quantified and estimated
+  6. Audit trail tracks all changes for compliance
+
+Real-World Problem It Solves:
+- Manual paperwork elimination → Digital program tracking
+- Scattered data → Centralized database
+- No accountability → Complete audit trail
+- Poor communication → Notifications system
+- Document chaos → Organized DocuSign integration
+- Analysis difficulty → Quantification & insights
+
+Why This Architecture Was Chosen:
+Architecture: Clean Architecture + CQRS
+
+Reasons:
+✓ Scalability - Easy to add new features
+✓ Testability - Each layer can be tested independently
+✓ Maintainability - Clear separation of concerns
+✓ Team collaboration - Multiple teams can work on different layers
+✓ SOLID principles - Dependency inversion, Single responsibility
+✓ CQRS - Separate read/write models for optimization
+
+================================================================================
+ARCHITECTURE EXPLANATION
+================================================================================
+
+CLEAN ARCHITECTURE LAYERS:
+
+1. PRESENTATION LAYER (Src/Presentation/WebApi)
+   Responsibilities:
+   - HTTP Request/Response handling
+   - Route mapping
+   - Input validation (first level)
+   - Response formatting
+   - Security (JWT, Authorization)
+
+2. APPLICATION LAYER (Src/Core/Application)
+   Responsibilities:
+   - Business logic orchestration
+   - Commands & Queries (CQRS)
+   - MediatR handlers
+   - Validation using FluentValidation
+   - Service coordination
+
+3. DOMAIN LAYER (Src/Core/Domain)
+   Responsibilities:
+   - Business entity definitions
+   - Business rules
+   - Enumerations
+   - Domain events
+
+4. INFRASTRUCTURE LAYER (Src/Infrastructure)
+   Responsibilities:
+   - Database access (EF Core + Npgsql)
+   - External service integration (Truterra, DocuSign)
+   - Repository implementations
+   - Unit of Work pattern
+
+================================================================================
+CQRS (Command Query Responsibility Segregation)
+================================================================================
+
+Concept: Separate read and write operations
+
+COMMAND - Write operation (Create, Update, Delete):
+public class CreateFarmerProgramActivityCommand : ICommand<Result>
+{
+    public long FarmerId { get; set; }
+    public long ProgramId { get; set; }
+}
+
+QUERY - Read operation (Get, List):
+public class GetFarmerProgramActivityQuery : IQuery<Result<FarmerProgramActivityDto>>
+{
+    public long Id { get; set; }
+}
+
+Why CQRS?
+✓ Different scaling strategies (reads vs writes)
+✓ Cache separately
+✓ Simple commands, complex queries
+✓ Event sourcing friendly
+
+================================================================================
+MEDIATR USAGE
+================================================================================
+
+What is MediatR?
+- A .NET library for implementing mediator pattern
+- Decouples requests from handlers
+- Provides pipeline for cross-cutting concerns
+
+REQUEST FLOW:
+1. Controller
+2. MediatR.Send(Command/Query)
+3. MediatR Pipeline (Validation, Logging, Transactions)
+4. Specific Handler
+5. Service/Repository
+6. Database
+
+EXAMPLE:
+// In controller
+var result = await _mediator.Send(
+    new CreateFarmerProgramActivityCommand { ... }
+);
+
+// Handler
+public class CreateFarmerProgramActivityHandler : 
+    ICommandHandler<CreateFarmerProgramActivityCommand, Result>
+{
+    public async Task<Result> Handle(
+        CreateFarmerProgramActivityCommand request,
+        CancellationToken cancellationToken)
+    {
+        // Business logic here
+    }
+}
+
+================================================================================
+REPOSITORY PATTERN
+================================================================================
+
+Purpose:
+- Abstraction of data access
+- Easy to mock for testing
+- Loose coupling
+
+Example:
+public interface IFarmerProgramActivityRepository
+{
+    Task<FarmerProgramActivity> GetByIdAsync(long id);
+    Task<List<FarmerProgramActivity>> GetByFarmerIdAsync(long farmerId);
+    Task AddAsync(FarmerProgramActivity entity);
+    Task UpdateAsync(FarmerProgramActivity entity);
+}
+
+Benefits:
+✓ Abstraction of data access
+✓ Easy to mock for testing
+✓ Loose coupling
+
+================================================================================
+DEPENDENCY INJECTION
+================================================================================
+
+Setup in Program.cs:
+builder.Services.AddDataDependencies(builder.Configuration);
+builder.Services.AddApplicationDependencies(builder.Configuration);
+builder.Services.AddAuthenticationDependencies();
+
+Benefits:
+✓ Manages object lifetimes (Singleton, Scoped, Transient)
+✓ Automatic resolution of dependencies
+✓ Easier testing and mocking
+
+================================================================================
+SOLID PRINCIPLES
+================================================================================
+
+Principles Used:
+
+S - Single Responsibility
+  Each handler does one thing
+
+O - Open/Closed
+  Open for extension (new commands), closed for modification
+
+L - Liskov Substitution
+  Repository implementations are interchangeable
+
+I - Interface Segregation
+  Smaller, focused interfaces (ICommand, IQuery)
+
+D - Dependency Inversion
+  Depend on abstractions, not concrete classes
+
+================================================================================
+DESIGN PATTERNS
+================================================================================
+
+Pattern               | Where              | Purpose
+Repository           | Data layer         | Abstract data access
+Mediator             | MediatR            | Decouple requests from handlers
+Strategy             | Validation         | Different validation rules
+Factory              | DI Container       | Create complex objects
+Publisher/Subscriber | Audit Events       | Decouple event producers/consumers
+Unit of Work         | Transaction mgmt   | Atomic operations
+
+================================================================================
+API REQUEST FLOW (END-TO-END)
+================================================================================
+
+1. HTTP POST /api/farmers/123/programs
+2. ProgramsController.CreateProgram()
+   - Receives request
+   - Maps to Command
+3. MediatR.Send(CreateProgramCommand)
+4. MediatR Pipeline
+   - [ValidationBehavior] - Validates using FluentValidation
+   - [LoggingBehavior] - Logs request
+   - [TransactionBehavior] - Opens DB transaction
+5. CreateProgramCommandHandler.Handle()
+   - Calls services
+   - Business logic
+   - Calls repositories
+6. ProgramRepository.AddAsync()
+   - EF Core adds entity to context
+7. SaveChangesAsync()
+   - INSERT into database
+8. PublishDomainEventsAsync()
+   - Raises ProgramCreatedEvent
+9. Event Handlers process
+   - AuditEventHandler logs changes
+   - NotificationHandler sends notification
+10. Response returned to Controller
+11. HTTP 201 Created with response body
+
+================================================================================
+DATABASE & BACKEND
+================================================================================
+
+POSTGRESQL USAGE:
+
+Why PostgreSQL?
+✓ Open source
+✓ JSONB support (for complex data)
+✓ GIS extensions (NetTopologySuite for spatial data)
+✓ Excellent scalability
+✓ ACID compliance
+
+Connection Configuration:
+appsettings.json:
+"ConnectionStrings": {
+    "Application": "User ID=postgres;Password=...;Host=localhost;Database=program_mgmt"
+}
+
+ApplicationDbContext:
+protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+{
+    optionsBuilder.UseNpgsql(
+        _configuration.GetConnectionString("Application"),
+        options => options.UseNetTopologySuite()
+    );
+}
+
+================================================================================
+ENTITY RELATIONSHIPS
+================================================================================
+
+Farmer (1) ──→ (Many) FarmerProgram
+   ├─→ (Many) FarmerProgramActivity
+   │   ├─→ (Many) FarmerProgramActivityWorker
+   │   └─→ (Many) FarmerProgramActivityDocument
+   │
+Program (1) ──→ (Many) FarmerProgram
+   ├─→ (Many) Asset
+   └─→ (Many) ProgramPhase
+           └─→ (Many) AssetActivity
+
+Document (1) ──→ (Many) FarmerProgramActivityDocument
+   └─→ (Many) DocumentPacket
+
+================================================================================
+MIGRATIONS
+================================================================================
+
+Purpose: Version control for database schema
+
+Your migrations:
+- 20241021113000_Initial.cs - Initial schema
+- 20250117153629_Added_Notification_Table.cs
+- 20250515102935_Remove_Notification_table.cs
+- 20250908112623_Add_Farmer_Program_Activity_Document_Table.cs
+
+How to create:
+dotnet ef migrations add "MigrationName" \
+  --project Src/Infrastructure/Data \
+  --startup-project Src/Presentation/WebApi \
+  --output-dir Migrations
+
+How to apply:
+dotnet ef database update \
+  --project Src/Infrastructure/Data \
+  --startup-project Src/Presentation/WebApi
+
+================================================================================
+QUERY OPTIMIZATION
+================================================================================
+
+Example: Pagination with efficient querying
+
+public async Task<PagedResult<FarmerProgramActivityDto>> 
+    GetFarmerActivitiesAsync(
+        long farmerId, 
+        int pageNumber, 
+        int pageSize)
+{
+    var query = _context.FarmerProgramActivities
+        .Where(x => x.FarmerId == farmerId)
+        .Include(x => x.Program)  // Eager load related data
+        .Include(x => x.Workers)
+        .AsNoTracking();  // Read-only query
+    
+    var totalCount = await query.CountAsync();
+    
+    var items = await query
+        .OrderByDescending(x => x.CreatedDate)
+        .Skip((pageNumber - 1) * pageSize)
+        .Take(pageSize)
+        .ToListAsync();
+    
+    return new PagedResult<FarmerProgramActivityDto>
+    {
+        Items = _mapper.Map<List<FarmerProgramActivityDto>>(items),
+        TotalCount = totalCount,
+        PageNumber = pageNumber,
+        PageSize = pageSize
+    };
+}
+
+Optimization Techniques:
+✓ .AsNoTracking() - Faster for read-only queries
+✓ .Include() - Eager loading (prevents N+1 queries)
+✓ Pagination - Skip/Take for large datasets
+✓ Select specific columns only (projection)
+
+================================================================================
+TRANSACTIONS
+================================================================================
+
+MediatR Behavior for transactions:
+
+public class TransactionBehavior<TRequest, TResponse> :
+    IPipelineBehavior<TRequest, TResponse>
+    where TRequest : ICommand<TResponse>
+{
+    private readonly ITruterraContext _context;
+    
+    public async Task<TResponse> Handle(
+        TRequest request,
+        RequestHandlerDelegate<TResponse> next,
+        CancellationToken cancellationToken)
+    {
+        using (var transaction = 
+            await _context.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                var response = await next();
+                await transaction.CommitAsync();
+                return response;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+    }
+}
+
+Benefits:
+✓ ACID compliance
+✓ All-or-nothing operations
+✓ Data consistency
+
+================================================================================
+INITIAL SCREENING QUESTIONS FOR INTERVIEW
+================================================================================
+
+Question 1: Overall Architecture
+"Looking at your Program Management Service, can you explain the overall 
+architecture you used and why you chose Clean Architecture + CQRS over simpler 
+alternatives like a traditional 3-layer architecture?"
+
+Expected Answer Points:
+- Scalability and separation of concerns
+- Different scaling strategies for read/write operations
+- Easier testing due to layer isolation
+- SOLID principles implementation
+- Better team collaboration
+- Flexibility for adding new features
+- Event-driven architecture capability
+- Domain-driven design alignment
+
+Question 2: API Request Flow
+"Walk me through the complete flow of a POST request from the controller 
+to the database and back, explaining each layer's responsibility."
+
+Expected Answer Points:
+- HTTP request received
+- Mapping to Command/Query
+- MediatR pipeline execution
+- Validation layer
+- Transaction management
+- Repository interaction
+- EF Core mapping
+- Database operation
+- Response serialization
+
+Question 3: Database Decisions
+"Why did you choose PostgreSQL for this project? What are the key database 
+features you're utilizing?"
+
+Expected Answer Points:
+- JSONB support
+- GIS extensions (NetTopologySuite)
+- Scalability
+- Open source
+- ACID compliance
+- Performance for large datasets
+- JSON capabilities for flexible data
+
+Question 4: Error Handling
+"How do you handle errors in your application? Walk me through the error 
+handling flow in a MediatR command handler."
+
+Expected Answer Points:
+- FluentValidation for input validation
+- Domain exceptions for business logic violations
+- Global exception handling middleware
+- Proper HTTP status codes
+- Meaningful error responses
+- Logging of errors
+- Transaction rollback on errors
+
+Question 5: Testing Strategy
+"How do you unit test a MediatR command handler? What do you mock and why?"
+
+Expected Answer Points:
+- Mocking repositories
+- Mocking external services
+- Testing business logic in isolation
+- Verifying repository calls
+- Testing validation rules
+- Testing transaction behavior
+- Using tools like Moq and xUnit
+
+================================================================================
+ADVANCED INTERVIEW QUESTIONS
+================================================================================
+
+Question 1: Scalability
+"If this service needs to handle 10x more requests, what changes would you 
+make to the architecture?"
+
+Answer Points:
+- Separate read/write databases (CQRS implementation)
+- Caching layer (Redis)
+- DDD bounded contexts
+- Microservices decomposition
+- API rate limiting
+- Connection pooling optimization
+- Asynchronous processing with queues
+- Load balancing
+
+Question 2: Performance Issues
+"You notice that farmer program queries are taking 2+ seconds. How would you 
+diagnose and fix this?"
+
+Answer Points:
+- SQL Profiler to identify slow queries
+- Missing database indexes
+- N+1 query problems
+- Inefficient joins
+- Add .AsNoTracking() for read queries
+- Implement pagination
+- Use select projections
+- Add caching for frequently accessed data
+- Analyze query execution plans
+
+Question 3: Concurrency Issues
+"What happens if two users try to update the same Farmer Program Activity 
+simultaneously? How do you handle this?"
+
+Answer Points:
+- Optimistic locking with version columns
+- Pessimistic locking
+- Conflict detection
+- Version increment on updates
+- Proper exception handling
+- User notification of conflicts
+- EF Core concurrency token configuration
+
+Question 4: Event-Driven Architecture
+"How would you implement an event sourcing system in this application? 
+What are the tradeoffs?"
+
+Answer Points:
+- Event store design
+- Audit trail benefits
+- Replay capability
+- Event bus implementation (Mediator pattern)
+- Eventual consistency
+- Complexity tradeoffs
+- CQRS integration
+- Event versioning
+
+Question 5: External Services Integration
+"How do you handle failures when calling external services like Truterra 
+or DocuSign?"
+
+Answer Points:
+- Retry policies with exponential backoff
+- Circuit breaker pattern
+- Timeout handling
+- Fallback strategies
+- Logging and monitoring
+- Graceful degradation
+- Compensation transactions
+- Polly library implementation
+
+================================================================================
+PRODUCTION ISSUE QUESTIONS
+================================================================================
+
+Q1: Database Connection Pool Exhaustion
+Problem: "Connection pool is exhausted, requests are timing out"
+Solution:
+- Check connection string pool settings (Max Pool Size)
+- Identify connection leaks (not closing connections)
+- Monitor connection usage
+- Implement connection pooling optimization
+- Use async/await properly to free connections
+
+Q2: Memory Leak in Worker Process
+Problem: "Memory usage keeps increasing until service crashes"
+Solution:
+- Check for unreleased resources
+- Verify disposables are implemented correctly
+- Use memory profilers
+- Check for circular references
+- Review event subscription cleanup
+- Verify DI container scope management
+
+Q3: Cascading Failures
+Problem: "One failing microservice brings down the entire system"
+Solution:
+- Implement circuit breaker pattern
+- Add retry logic with exponential backoff
+- Implement timeout policies
+- Add health checks
+- Implement bulkheads to isolate failures
+- Use message queues for asynchronous communication
+
+Q4: Audit Log Explosion
+Problem: "Audit table is growing too fast, queries are slow"
+Solution:
+- Archive old audit logs
+- Implement audit log retention policy
+- Add indexes on frequently queried columns
+- Partition audit table by date
+- Implement log rotation
+- Filter unnecessary events
+
+Q5: Notification Service Backlog
+Problem: "Notifications are delayed by hours"
+Solution:
+- Move notifications to async processing (message queue)
+- Implement batching for notifications
+- Add priority queue
+- Scale notification workers
+- Implement retry mechanism
+- Monitor queue depth
+
+================================================================================
+DEBUGGING SCENARIOS
+================================================================================
+
+Scenario 1: Farmer Program Creation Fails Silently
+- Check MediatR handler exception handling
+- Verify database connection
+- Check validation rules
+- Look at transaction behavior
+- Monitor application logs
+- Check event handlers for errors
+- Verify domain event publishing
+
+Scenario 2: N+1 Query Problem
+Symptom: Performance degrades with data growth
+
+Fix:
+- Use SQL Profiler to identify problem query
+- Add .Include() for related entities
+- Use .Select() for projections
+- Implement .AsNoTracking() for read queries
+- Review query patterns in handlers
+
+Scenario 3: Concurrent Update Conflicts
+Symptom: "Concurrency exception" errors
+
+Fix:
+- Add version column to entities
+- Implement optimistic locking
+- Handle DbUpdateConcurrencyException
+- Provide user-friendly conflict messages
+- Implement retry logic
+
+Scenario 4: Memory Leak in Event Handler
+Symptom: Memory usage increases over time
+
+Fix:
+- Check event handler subscriptions
+- Verify cleanup on application shutdown
+- Review MediatR event disposal
+- Use profiler to find leaked objects
+- Implement proper IDisposable pattern
+
+Scenario 5: Authorization Bypass
+Symptom: Users accessing data they shouldn't
+
+Fix:
+- Verify authorization attributes
+- Check permission logic
+- Review token validation
+- Audit policy configuration
+- Test permission boundaries
+
+================================================================================
+SYSTEM DESIGN QUESTIONS
+================================================================================
+
+Q1: Design a Real-Time Notification System
+Answer Framework:
+1. Event sourcing with message queue
+2. Background workers consuming messages
+3. WebSocket connection for real-time delivery
+4. Fallback to polling
+5. Retry mechanism for failed sends
+6. Delivery guarantee strategy
+7. Scaling strategy
+
+Q2: Design a Document Processing Pipeline
+Answer Framework:
+1. File upload handler
+2. Async processing with queues
+3. File validation and scanning
+4. DocuSign integration
+5. OCR for document extraction
+6. Storage strategy
+7. Error handling and retries
+8. Audit trail
+
+Q3: Design a Farmer Program Analytics Dashboard
+Answer Framework:
+1. Read model optimization
+2. Event aggregation
+3. Cache layer for metrics
+4. Time-series data storage
+5. Query optimization for analytics
+6. WebSocket for real-time updates
+7. Reporting queries
+8. Scalability for large datasets
+
+Q4: Design a Microservices Architecture
+Answer Framework:
+1. Service boundaries (DDD bounded contexts)
+2. API gateway
+3. Service-to-service communication
+4. Event bus for async communication
+5. Distributed logging
+6. Service discovery
+7. Monitoring and alerting
+8. Deployment strategy
+
+Q5: Design a Disaster Recovery System
+Answer Framework:
+1. Backup strategy
+2. Replication strategy
+3. Failover mechanism
+4. Recovery time objective (RTO)
+5. Recovery point objective (RPO)
+6. Testing and validation
+7. Documentation
+8. Incident response
+
+================================================================================
+TESTING STRATEGY
+================================================================================
+
+UNIT TESTING:
+- Test handlers in isolation
+- Mock repositories and services
+- Test business logic
+- Test validation rules
+- Test error paths
+
+INTEGRATION TESTING:
+- Test with real database
+- Test end-to-end flows
+- Test event publishing
+- Test external service integrations
+- Use Docker for database consistency
+
+EXAMPLE UNIT TEST:
+[Fact]
+public async Task CreateFarmerProgramActivity_WithValidData_ShouldSucceed()
+{
+    // Arrange
+    var command = new CreateFarmerProgramActivityCommand 
+    { 
+        FarmerId = 1, 
+        ProgramId = 1 
+    };
+    
+    var mockRepository = new Mock<IFarmerProgramActivityRepository>();
+    mockRepository.Setup(x => x.AddAsync(It.IsAny<FarmerProgramActivity>()))
+        .Returns(Task.CompletedTask);
+    
+    var handler = new CreateFarmerProgramActivityHandler(mockRepository.Object);
+    
+    // Act
+    var result = await handler.Handle(command, CancellationToken.None);
+    
+    // Assert
+    Assert.True(result.Success);
+    mockRepository.Verify(x => x.AddAsync(It.IsAny<FarmerProgramActivity>()), 
+        Times.Once);
+}
+
+TESTING LIBRARIES:
+- xUnit - Test framework
+- Moq - Mocking library
+- FluentAssertions - Assertion library
+- Testcontainers - Docker-based testing
+
+================================================================================
+DEVOPS & DEPLOYMENT
+================================================================================
+
+DOCKER SETUP:
+- Dockerfile in project root
+- Multi-stage build for optimization
+- Uses .NET runtime image
+- Exposes port 5000
+
+CI/CD PIPELINE (Azure Pipelines):
+1. Code checkout
+2. Restore NuGet packages
+3. Build solution
+4. Run unit tests
+5. Run integration tests
+6. Build Docker image
+7. Push to container registry
+8. Deploy to environment
+
+ENVIRONMENT CONFIGURATIONS:
+- Development (local debugging)
+- QA (testing environment)
+- Staging (production-like)
+- Production (live)
+
+DEPLOYED WITH HELM:
+- Helm charts in deploy/helm/
+- Kubernetes deployment
+- Service discovery
+- Load balancing
+
+SECRETS MANAGEMENT:
+- Azure Key Vault
+- Environment variables
+- Secret rotation policy
+- Audit logging
+
+DEPLOYMENT FLOW:
+1. Developer commits code
+2. Azure Pipeline triggers
+3. Tests run automatically
+4. Docker image built
+5. Image pushed to ACR
+6. Helm chart deployed to AKS
+7. Health checks verify deployment
+
+================================================================================
+HR + TECHNICAL COMBINED QUESTIONS
+================================================================================
+
+Q1: Explain Your Project in 2 Minutes
+
+Good Answer:
+"I developed a Program Management Service for TruterraSmart, a digital 
+agriculture platform. The service manages farmer participation in seasonal 
+programs, activities, and document collection.
+
+Key aspects:
+- Clean Architecture with CQRS for scalability
+- PostgreSQL with EF Core for data persistence
+- MediatR for request handling and cross-cutting concerns
+- Event-driven architecture for notifications and audit trails
+- Deployed on Kubernetes with Helm
+
+My role involved:
+- Designing the architecture
+- Implementing core features
+- Integrating with external services (DocuSign, Truterra)
+- Writing comprehensive unit and integration tests
+- Optimizing database queries for performance
+- Setting up CI/CD pipeline
+
+This project taught me about handling complex business domains, designing 
+scalable systems, and managing distributed architectures."
+
+Q2: Biggest Challenge Faced
+
+Good Answer:
+"The biggest challenge was designing the audit system while maintaining 
+performance. We needed:
+1. Complete audit trail for compliance
+2. Fast query performance
+3. Scalable storage
+
+Solution:
+- Implemented event sourcing with MediatR
+- Separate audit event handlers
+- Archive old logs to reduce query performance impact
+- Optimized indexes on audit table
+- Added caching for frequently accessed data
+
+This taught me about tradeoffs between compliance and performance."
+
+Q3: Biggest Achievement
+
+Good Answer:
+"Optimizing the farmer program queries from 5+ seconds to under 200ms. 
+
+Process:
+1. Identified N+1 query problems using SQL Profiler
+2. Implemented eager loading with .Include()
+3. Added pagination for large datasets
+4. Implemented query projections
+5. Added caching for frequently accessed data
+6. Added database indexes strategically
+
+Result: 96% improvement in query performance, enabling better user experience."
+
+Q4: Why These Technologies Were Chosen
+
+Good Answer:
+"Technology choices were driven by:
+
+.NET/C#:
+- Team expertise
+- Enterprise-grade reliability
+- Strong ORM ecosystem (EF Core)
+- Performance and scalability
+
+PostgreSQL:
+- Open source and cost-effective
+- JSONB support for flexible schemas
+- GIS extensions for spatial data
+- Proven reliability at scale
+- ACID compliance for data integrity
+
+Clean Architecture + CQRS:
+- Separate read/write paths for optimization
+- Clear layer separation for testing
+- Domain-driven design alignment
+- Team collaboration without conflicts
+- Scalability for growing requirements
+
+Docker + Kubernetes:
+- Environment consistency
+- Easy scaling
+- Industry standard
+- Cost optimization
+
+Each choice was deliberate and aligned with project requirements."
+
+Q5: What You Would Improve in Future
+
+Good Answer:
+"If I redesigned this system today, I would:
+
+1. Event Sourcing:
+   - Implement complete event sourcing
+   - Better audit trail without separate audit tables
+   - Reconstruct state from events
+   - Time travel debugging
+
+2. API Versioning:
+   - Implement API versioning strategy
+   - Maintain backward compatibility
+   - Gradual migration path for clients
+
+3. Observability:
+   - Structured logging with correlation IDs
+   - Distributed tracing (OpenTelemetry)
+   - Better monitoring and alerting
+   - Business metrics alongside technical metrics
+
+4. Security:
+   - Implement OAuth 2.0 with proper scopes
+   - API rate limiting
+   - Request signing
+   - Enhanced encryption
+
+5. Performance:
+   - Implement CQRS fully (separate read database)
+   - Event stream for real-time updates
+   - Better caching strategy
+   - Database sharding for scale
+
+6. Testing:
+   - Implement contract testing
+   - Better integration test coverage
+   - Performance testing
+   - Chaos engineering
+
+7. Documentation:
+   - API documentation with examples
+   - Architecture decision records (ADRs)
+   - Runbooks for incidents
+   - Video walkthroughs
+
+These improvements would make the system:
+- More maintainable
+- Better performing
+- More secure
+- Easier to understand"
+
+================================================================================
+COMMON INTERVIEWER FOLLOW-UP QUESTIONS
+================================================================================
+
+Q1: "You mentioned CQRS. Why not just use a single model?"
+Answer:
+- Different optimization strategies for reads vs writes
+- Reads often dominate in agricultural systems
+- Can scale read replicas independently
+- Clearer separation of concerns
+- Cache read models separately
+- Simplifies complex queries
+
+Q2: "Has this system ever gone down? How did you handle it?"
+Answer:
+- Yes, briefly during [incident]
+- Implemented circuit breaker pattern
+- Added retry logic
+- Improved monitoring and alerting
+- Added health checks
+- Better documentation
+
+Q3: "What if you had to scale this to 100x current load?"
+Answer:
+- Separate read/write databases (full CQRS)
+- Implement Redis caching
+- Database sharding strategy
+- Microservices decomposition
+- API rate limiting
+- Async message processing
+- CDN for static content
+
+Q4: "How do you keep code quality high?"
+Answer:
+- Code reviews (all PRs reviewed)
+- Automated testing (>80% coverage)
+- SonarQube for code analysis
+- Linting rules enforced in CI
+- Architecture reviews
+- Documentation requirements
+
+Q5: "What was your biggest mistake in this project?"
+Answer:
+- Initially didn't consider pagination impact
+- Ran out of memory with large datasets
+- Fixed by implementing proper pagination
+- Added monitoring to catch similar issues
+- Better load testing from the start
+
+================================================================================
+MOCK INTERVIEW - READY TO BEGIN
+================================================================================
+
+I'm ready to conduct a mock interview for the Senior .NET Developer role.
+
+GROUND RULES:
+1. I'll ask one question at a time
+2. You provide your complete answer
+3. I'll evaluate your response
+4. I'll give feedback and suggestions
+5. I'll ask follow-up questions like a real interviewer
+6. We'll cover: Architecture, Coding, System Design, Behavioral
+
+LET'S START WITH ROUND 1: ARCHITECTURE QUESTIONS
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+Created: May 21, 2026
+For: Interview Preparation - TruterraSmart Program Management Service
+Format: Plain Text Interview Guide
+================================================================================
