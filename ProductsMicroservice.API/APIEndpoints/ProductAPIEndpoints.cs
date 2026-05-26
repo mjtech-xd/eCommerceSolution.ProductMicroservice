@@ -18,14 +18,14 @@ public static class ProductAPIEndpoints
         });
         
         //Get /api/products/search/productId
-        app.MapGet("/api/products/search/productId{productId:guid}", async (IProductService productsService, Guid productId) =>
+        app.MapGet("/api/products/search/product-id/{productId:guid}", async (IProductService productsService, Guid productId) =>
         {
             ProductResponse? product = await productsService.GetProductByCondition(x => x.ProductID == productId);
             return Results.Ok(product);
         });
         
         //Get /api/products/search/
-        app.MapGet("/api/products/search/productId{searchString}", async (IProductService productsService, string searchString) =>
+        app.MapGet("/api/products/search/{searchString}", async (IProductService productsService, string searchString) =>
         {
             List<ProductResponse?> productsByProductName = await productsService.GetProductsByCondition(x => x.ProductName != null && x.ProductName.Contains(searchString, StringComparison.OrdinalIgnoreCase));
             List<ProductResponse?> productsByCategory = await productsService.GetProductsByCondition(x => x.Category != null && x.Category.Contains(searchString, StringComparison.OrdinalIgnoreCase));
