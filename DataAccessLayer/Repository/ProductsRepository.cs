@@ -15,7 +15,8 @@ public class ProductsRepository(ApplicationDbContext dbContext) : IProductReposi
 
     public async Task<IEnumerable<Product?>> GetProductsByCondition(Expression<Func<Product, bool>> conditionExpression)
     {
-        return await dbContext.Products.Where(conditionExpression).ToListAsync();
+        var products = await dbContext.Products.ToListAsync();
+        return products.AsEnumerable().Where(conditionExpression.Compile());
     }
 
     public async Task<Product?> GetProductByCondition(Expression<Func<Product, bool>> conditionExpression)
