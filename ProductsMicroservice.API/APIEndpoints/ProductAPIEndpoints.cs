@@ -62,7 +62,7 @@ public static class ProductAPIEndpoints
         });
         
         //PUT /api/products
-        app.MapPost("/api/products", async (IProductService productService, IValidator<ProductUpdateRequest> productUpdateRequestValidator, ProductUpdateRequest productUpdateRequest) =>
+        app.MapPut("/api/products", async (IProductService productService, IValidator<ProductUpdateRequest> productUpdateRequestValidator, ProductUpdateRequest productUpdateRequest) =>
         {
             ValidationResult validationResult = await productUpdateRequestValidator.ValidateAsync(productUpdateRequest);
             if(!validationResult.IsValid)
